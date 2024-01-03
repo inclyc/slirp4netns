@@ -31,11 +31,9 @@ configure_file(
 
 executable(
     'slirp4netns',
-    'slirp4netns.c',
     'api.c',
-    'sandbox.c',
+    'slirp4netns.c',
     'main.c',
-    'seccompfilter.c',
     dependencies: [ glib, libcap, libseccomp, libslirp ],
     link_with: [ parson ]
 )

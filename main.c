@@ -443,11 +443,6 @@ static void usage(const char *argv0)
            "default=%s)\n",
            DEFAULT_NETNS_TYPE);
     printf("--userns-path=PATH	 specify user namespace path\n");
-    printf(
-        "--enable-sandbox         create a new mount namespace (and drop all "
-        "caps except CAP_NET_BIND_SERVICE if running as the root)\n");
-    printf("--enable-seccomp         enable seccomp to limit syscalls "
-           "(experimental)\n");
     /* v1.1.0 */
 #if SLIRP_CONFIG_VERSION_MAX >= 2
     printf("--outbound-addr=IPv4     sets outbound ipv4 address to bound to "
