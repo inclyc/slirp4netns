@@ -3,6 +3,9 @@
 #define SLIRP4NETNS_H
 #include <arpa/inet.h>
 
+// libslirp
+#include <libslirp.h>
+
 struct slirp4netns_config {
     unsigned int mtu;
     struct in_addr vnetwork; // 10.0.2.0
@@ -14,8 +17,6 @@ struct slirp4netns_config {
         recommended_vguest; // 10.0.2.100 (slirp itself is unaware of vguest)
     bool enable_ipv6;
     bool disable_host_loopback;
-    bool enable_sandbox;
-    bool enable_seccomp;
 #if SLIRP_CONFIG_VERSION_MAX >= 2
     bool enable_outbound_addr;
     struct sockaddr_in outbound_addr;

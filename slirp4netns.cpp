@@ -1,5 +1,4 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-#define _GNU_SOURCE
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -9,7 +8,6 @@
 #include <glib.h>
 #include <libslirp.h>
 
-#include "api.h"
 #include "slirp4netns.h"
 
 /* opaque for SlirpCb */
@@ -27,13 +25,13 @@ static ssize_t libslirp_send_packet(const void *pkt, size_t pkt_len,
 }
 
 /* implements SlirpCb.guest_error */
-static void libslirp_guest_error(const char *msg, void *opaque)
+static void libslirp_guest_error(const char *msg, void *opaque [[gnu::unused]])
 {
     fprintf(stderr, "libslirp: %s\n", msg);
 }
 
 /* implements SlirpCb.clock_get_ns */
-static int64_t libslirp_clock_get_ns(void *opaque)
+static int64_t libslirp_clock_get_ns(void *opaque [[gnu::unused]])
 {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -51,7 +49,7 @@ struct timer {
 static void *libslirp_timer_new(SlirpTimerCb cb, void *cb_opaque, void *opaque)
 {
     struct libslirp_data *data = (struct libslirp_data *)opaque;
-    struct timer *t = g_malloc0(sizeof(*t));
+    struct timer *t = static_cast<struct timer *>(g_malloc0(sizeof(*t)));
     t->cb = cb;
     t->cb_opaque = cb_opaque;
     t->expire_timer_msec = -1;
@@ -69,14 +67,15 @@ static void libslirp_timer_free(void *timer, void *opaque)
 
 /* implements SlirpCb.timer_mod */
 static void libslirp_timer_mod(void *timer, int64_t expire_timer_msec,
-                               void *opaque)
+                               void *opaque [[gnu::unused]])
 {
     struct timer *t = (struct timer *)timer;
     t->expire_timer_msec = expire_timer_msec;
 }
 
 /* implements SlirpCb.register_poll_fd */
-static void libslirp_register_poll_fd(int fd, void *opaque)
+static void libslirp_register_poll_fd(int fd [[gnu::unused]],
+                                      void *opaque [[gnu::unused]])
 {
     /*
      * NOP
@@ -93,7 +92,8 @@ static void libslirp_register_poll_fd(int fd, void *opaque)
 }
 
 /* implements SlirpCb.unregister_poll_fd */
-static void libslirp_unregister_poll_fd(int fd, void *opaque)
+static void libslirp_unregister_poll_fd(int fd [[gnu::unused]],
+                                        void *opaque [[gnu::unused]])
 {
     /*
      * NOP
@@ -105,7 +105,7 @@ static void libslirp_unregister_poll_fd(int fd, void *opaque)
 }
 
 /* implements SlirpCb.notify */
-static void libslirp_notify(void *opaque)
+static void libslirp_notify(void *opaque [[gnu::unused]])
 {
     /*
      * NOP
@@ -149,10 +149,10 @@ static int libslirp_poll_to_gio(int events)
  */
 static int libslirp_add_poll(int fd, int events, void *opaque)
 {
-    GArray *pollfds = opaque;
+    GArray *pollfds = (GArray *)(opaque);
     GPollFD pfd = {
         .fd = fd,
-        .events = libslirp_poll_to_gio(events),
+        .events = (ushort)libslirp_poll_to_gio(events),
     };
     int idx = pollfds->len;
     g_array_append_val(pollfds, pfd);
@@ -187,7 +187,7 @@ static int libslirp_gio_to_poll(int events)
  */
 static int libslirp_get_revents(int idx, void *opaque)
 {
-    GArray *pollfds = opaque;
+    GArray *pollfds = (GArray *)(opaque);
     return libslirp_gio_to_poll(g_array_index(pollfds, GPollFD, idx).revents);
 }
 
@@ -202,7 +202,7 @@ static void update_ra_timeout(uint32_t *timeout_msec,
     int64_t now_msec = libslirp_clock_get_ns(data) / 1000000;
     GSList *f;
     for (f = data->timers; f != NULL; f = f->next) {
-        struct timer *t = f->data;
+        struct timer *t = (timer *)f->data;
         if (t->expire_timer_msec != -1) {
             int64_t diff = t->expire_timer_msec - now_msec;
             if (diff < 0)
@@ -223,7 +223,7 @@ static void check_ra_timeout(struct libslirp_data *data)
     int64_t now_msec = libslirp_clock_get_ns(data) / 1000000;
     GSList *f;
     for (f = data->timers; f != NULL; f = f->next) {
-        struct timer *t = f->data;
+        struct timer *t = static_cast<struct timer *>(f->data);
         if (t->expire_timer_msec != -1) {
             int64_t diff = t->expire_timer_msec - now_msec;
             if (diff <= 0) {
@@ -300,18 +300,16 @@ Slirp *create_slirp(void *opaque, struct slirp4netns_config *s4nn)
 
 #define ETH_BUF_SIZE (65536)
 
-int do_slirp(int tapfd, int readyfd, int exitfd, const char *api_socket,
+int do_slirp(int tapfd, int readyfd, int exitfd,
+             const char *api_socket [[gnu::unused]],
              struct slirp4netns_config *cfg)
 {
     int ret = -1;
     Slirp *slirp = NULL;
     uint8_t *buf = NULL;
     struct libslirp_data opaque = { .tapfd = tapfd, .timers = NULL };
-    int apifd = -1;
-    struct api_ctx *apictx = NULL;
     GArray *pollfds = g_array_new(FALSE, FALSE, sizeof(GPollFD));
     int pollfds_exitfd_idx = -1;
-    int pollfds_apifd_idx = -1;
     size_t n_fds = 1;
     GPollFD tap_pollfd = { .fd = tapfd,
                            .events = G_IO_IN | G_IO_HUP,
@@ -326,7 +324,7 @@ int do_slirp(int tapfd, int readyfd, int exitfd, const char *api_socket,
         fprintf(stderr, "create_slirp failed\n");
         goto err;
     }
-    buf = malloc(ETH_BUF_SIZE);
+    buf = (unsigned char *)malloc(ETH_BUF_SIZE);
     if (buf == NULL) {
         goto err;
     }
@@ -335,19 +333,6 @@ int do_slirp(int tapfd, int readyfd, int exitfd, const char *api_socket,
         n_fds++;
         g_array_append_val(pollfds, exit_pollfd);
         pollfds_exitfd_idx = n_fds - 1;
-    }
-    if (api_socket != NULL) {
-        if ((apifd = api_bindlisten(api_socket)) < 0) {
-            goto err;
-        }
-        if ((apictx = api_ctx_alloc(cfg)) == NULL) {
-            fprintf(stderr, "api_ctx_alloc failed\n");
-            goto err;
-        }
-        api_pollfd.fd = apifd;
-        n_fds++;
-        g_array_append_val(pollfds, api_pollfd);
-        pollfds_apifd_idx = n_fds - 1;
     }
     signal(SIGPIPE, SIG_IGN);
     if (readyfd >= 0) {
@@ -390,14 +375,6 @@ int do_slirp(int tapfd, int readyfd, int exitfd, const char *api_socket,
             goto success;
         }
 
-        if (pollfds_apifd_idx >= 0 && pollfds_data[pollfds_apifd_idx].revents) {
-            int rc;
-            fprintf(stderr, "apifd event\n");
-            if ((rc = api_handler(slirp, apifd, apictx)) < 0) {
-                fprintf(stderr, "api_handler: rc=%d\n", rc);
-            }
-        }
-
         slirp_pollfds_poll(slirp, (pollout <= 0), libslirp_get_revents,
                            pollfds);
         check_ra_timeout(&opaque);
@@ -408,10 +385,6 @@ err:
     fprintf(stderr, "do_slirp is exiting\n");
     if (buf != NULL) {
         free(buf);
-    }
-    if (apictx != NULL) {
-        api_ctx_free(apictx);
-        unlink(api_socket);
     }
     g_array_free(pollfds, TRUE);
     return ret;

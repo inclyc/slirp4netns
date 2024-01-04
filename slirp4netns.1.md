@@ -73,10 +73,6 @@ Requires `/etc/resolv.conf` not to be a symlink to a file outside /etc and /run.
 When running as the root, the process does not enter the user namespace but all
 the capabilities except `CAP_NET_BIND_SERVICE` are dropped.
 
-`--enable-seccomp` (since v0.4.0, EXPERIMENTAL)
-enable `seccomp(2)` to limit syscalls.
-Typically used in conjunction with `--enable-sandbox`.
-
 `--outbound-addr=IPv4` (since v1.1.0, EXPERIMENTAL)
 specify outbound ipv4 address slirp should bind to
 
@@ -145,7 +141,7 @@ starting slirp, MTU=65520
     link/ether c2:28:0c:0e:29:06 brd ff:ff:ff:ff:ff:ff
     inet 10.0.2.100/24 brd 10.0.2.255 scope global tap0
        valid_lft forever preferred_lft forever
-    inet6 fe80::c028:cff:fe0e:2906/64 scope link 
+    inet6 fe80::c028:cff:fe0e:2906/64 scope link
        valid_lft forever preferred_lft forever
 (namespace)$ echo "nameserver 10.0.2.3" > /tmp/resolv.conf
 (namespace)$ mount --bind /tmp/resolv.conf /etc/resolv.conf
@@ -249,7 +245,7 @@ Remarks:
 * A request must be less than 4096 bytes.
 * JSON responses may contain `error` instead of `return`.
 
-# DEFINED NAMESPACE PATHS 
+# DEFINED NAMESPACE PATHS
 A user can define a network namespace path as opposed to the default process ID:
 
 ```console
@@ -262,14 +258,14 @@ Additionally, a `--userns-path=PATH` argument can be included to override any us
 (host)$ slirp4netns --netns-type=path --userns-path=/path/to/userns /path/to/netns tap0
 ```
 
-# OUTBOUND ADDRESSES 
-A user can defined preferred outbound ipv4 and ipv6 address in multi IP scenarios. 
+# OUTBOUND ADDRESSES
+A user can defined preferred outbound ipv4 and ipv6 address in multi IP scenarios.
 
 ```console
 (host)$ slirp4netns --outbound-addr=10.2.2.10 --outbound-addr6=fe80::10 ...
 ```
 
-Optionally you can use interface names instead of ip addresses. 
+Optionally you can use interface names instead of ip addresses.
 
 ```console
 (host)$ slirp4netns --outbound-addr=eth0 --outbound-addr6=eth0 ...

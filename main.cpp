@@ -1,29 +1,35 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-#define _GNU_SOURCE
 #include "config.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sched.h>
+
+#include "slirp4netns.h"
+
+// C++ standard
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+
+// glibc
+#include <arpa/inet.h>
+
+#include <linux/if_tun.h>
+
+#include <net/if.h>
+#include <net/route.h>
+
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
-#include <linux/if_tun.h>
-#include <arpa/inet.h>
-#include <net/if.h>
-#include <net/route.h>
+
+#include <fcntl.h>
 #include <getopt.h>
-#include <stdbool.h>
-#include <regex.h>
-#include <libslirp.h>
-#include "slirp4netns.h"
 #include <ifaddrs.h>
-#include <seccomp.h>
+#include <regex.h>
+#include <sched.h>
+#include <unistd.h>
 
 #define DEFAULT_MTU (1500)
 #define DEFAULT_CIDR ("10.0.2.0/24")
@@ -41,7 +47,8 @@
 static int nsenter(pid_t target_pid, char *netns, char *userns,
                    bool only_userns)
 {
-    int usernsfd = -1, netnsfd = -1;
+    int usernsfd = -1;
+    int netnsfd = -1;
     if (!only_userns && !netns) {
         if (asprintf(&netns, "/proc/%d/ns/net", target_pid) < 0) {
             perror("cannot get netns path");
@@ -54,11 +61,11 @@ static int nsenter(pid_t target_pid, char *netns, char *userns,
             return -1;
         }
     }
-    if (!only_userns && (netnsfd = open(netns, O_RDONLY)) < 0) {
+    if (netnsfd = open(netns, O_RDONLY); !only_userns && netnsfd < 0) {
         perror(netns);
         return netnsfd;
     }
-    if (userns && (usernsfd = open(userns, O_RDONLY)) < 0) {
+    if ((usernsfd = open(userns, O_RDONLY)); userns && usernsfd < 0) {
         perror(userns);
         return usernsfd;
     }
@@ -144,8 +151,7 @@ static int configure_network(const char *tapname,
     }
 
     // set loopback device to UP
-    struct ifreq ifr_lo = { .ifr_name = "lo",
-                            .ifr_flags = IFF_UP | IFF_RUNNING };
+    ifreq ifr_lo = { .ifr_name = "lo", .ifr_flags = IFF_UP | IFF_RUNNING };
     if (ioctl(sockfd, SIOCSIFFLAGS, &ifr_lo) < 0) {
         perror("cannot set device up");
         return -1;
@@ -236,69 +242,6 @@ static int child(int sock, pid_t target_pid, bool do_config_network,
     return 0;
 }
 
-/*
- * Child (--target-type=bess)
- *
- * FIXME: We do not really need to fork the child for BESS mode
- */
-static int child_bess(int sock, const char *bess_socket)
-{
-    int bess_listenfd = -1, bess_acceptfd = -1;
-    struct sockaddr_un bess_listenaddr, bess_acceptaddr;
-    socklen_t bess_acceptaddrlen = sizeof(struct sockaddr_un);
-    memset(&bess_acceptaddr, 0, sizeof(bess_acceptaddr));
-    memset(&bess_listenaddr, 0, sizeof(bess_listenaddr));
-
-    /* Listen on the BESS socket */
-    if ((bess_listenfd = socket(AF_UNIX, SOCK_SEQPACKET, 0)) == -1) {
-        perror("child_bess: socket");
-        goto error;
-    }
-    bess_listenaddr.sun_family = AF_UNIX;
-    if (bess_socket == NULL) {
-        fprintf(stderr, "the specified BESS socket path is NULL\n");
-        goto error;
-    }
-    if (strlen(bess_socket) >= sizeof(bess_listenaddr.sun_path)) {
-        fprintf(stderr, "the specified BESS socket path is too long (>= %lu)\n",
-                sizeof(bess_listenaddr.sun_path));
-        goto error;
-    }
-    strncpy(bess_listenaddr.sun_path, bess_socket,
-            sizeof(bess_listenaddr.sun_path) - 1);
-    unlink(bess_socket); /* avoid EADDRINUSE */
-    if (bind(bess_listenfd, (struct sockaddr *)&bess_listenaddr,
-             sizeof(bess_listenaddr)) < 0) {
-        perror("child_bess: bind");
-        goto error;
-    }
-    if (listen(bess_listenfd, 0) < 0) {
-        perror("child_bess: listen");
-        goto error;
-    }
-
-    /* Accept a connection, and send its connection to the parent */
-    fprintf(stderr, "Waiting for connection to %s\n", bess_socket);
-    if ((bess_acceptfd =
-             accept(bess_listenfd, (struct sockaddr *)&bess_acceptaddr,
-                    &bess_acceptaddrlen)) < 0) {
-        perror("child_bess: accept");
-        goto error;
-    }
-    if (sendfd(sock, bess_acceptfd) < 0) {
-        goto error;
-    }
-    fprintf(stderr, "sent \"tapfd\"=%d (not really TAP) for %s\n",
-            bess_acceptfd, bess_socket);
-    close(sock);
-    close(bess_listenfd);
-    return 0;
-error:
-    close(bess_acceptfd);
-    close(bess_listenfd);
-    close(sock);
-    return -1;
-}
 
 static int recvfd(int sock)
 {
@@ -334,7 +277,8 @@ static int recvfd(int sock)
 }
 
 static int parent(int sock, int ready_fd, int exit_fd, const char *api_socket,
-                  struct slirp4netns_config *cfg, pid_t target_pid)
+                  struct slirp4netns_config *cfg,
+                  pid_t target_pid [[gnu::unused]])
 {
     char str[INET6_ADDRSTRLEN];
     int rc, tapfd;
@@ -392,22 +336,6 @@ static int parent(int sock, int ready_fd, int exit_fd, const char *api_socket,
             "WARNING: 127.0.0.1:* on the host is accessible as %s (set "
             "--disable-host-loopback to prohibit connecting to 127.0.0.1:*)\n",
             inet_ntop(AF_INET, &cfg->vhost, str, sizeof(str)));
-    }
-    if (cfg->enable_sandbox && geteuid() != 0) {
-        if ((rc = nsenter(target_pid, NULL, NULL, true)) < 0) {
-            close(tapfd);
-            return rc;
-        }
-        if ((rc = setegid(0)) < 0) {
-            fprintf(stderr, "setegid(0)\n");
-            close(tapfd);
-            return rc;
-        }
-        if ((rc = seteuid(0)) < 0) {
-            fprintf(stderr, "seteuid(0)\n");
-            close(tapfd);
-            return rc;
-        }
     }
     if ((rc = do_slirp(tapfd, ready_fd, exit_fd, api_socket, cfg)) < 0) {
         fprintf(stderr, "do_slirp failed\n");
@@ -469,18 +397,12 @@ static void usage(const char *argv0)
 // version output is runc-compatible and machine-parsable
 static void version()
 {
-    const struct scmp_version *scmpv = seccomp_version();
     printf("slirp4netns version %s\n", VERSION ? VERSION : PACKAGE_VERSION);
 #ifdef COMMIT
     printf("commit: %s\n", COMMIT);
 #endif
     printf("libslirp: %s\n", slirp_version_string());
     printf("SLIRP_CONFIG_VERSION_MAX: %d\n", SLIRP_CONFIG_VERSION_MAX);
-    if (scmpv != NULL) {
-        printf("libseccomp: %d.%d.%d\n", scmpv->major, scmpv->minor,
-               scmpv->micro);
-        /* Do not free scmpv */
-    }
 }
 
 struct options {
@@ -499,12 +421,9 @@ struct options {
     bool do_config_network; // -c
     bool disable_host_loopback; // --disable-host-loopback
     bool enable_ipv6; // -6
-    bool enable_sandbox; // --enable-sandbox
-    bool enable_seccomp; // --enable-seccomp
     bool disable_dns; // --disable-dns
     char *macaddress; // --macaddress
     char *target_type; // --target-type
-    char *bess_socket; // argv[1] (When --target-type="bess")
 };
 
 static void options_init(struct options *options)
@@ -556,10 +475,6 @@ static void options_destroy(struct options *options)
         free(options->target_type);
         options->target_type = NULL;
     }
-    if (options->bess_socket != NULL) {
-        free(options->bess_socket);
-        options->bess_socket = NULL;
-    }
 }
 
 // * caller does not need to call options_init()
@@ -581,8 +496,6 @@ static void parse_args(int argc, char *const argv[], struct options *options)
 #define DISABLE_HOST_LOOPBACK -43
 #define NETNS_TYPE -44
 #define USERNS_PATH -45
-#define ENABLE_SANDBOX -46
-#define ENABLE_SECCOMP -47
 #define OUTBOUND_ADDR -48
 #define OUTBOUND_ADDR6 -49
 #define DISABLE_DNS -50
@@ -604,9 +517,6 @@ static void parse_args(int argc, char *const argv[], struct options *options)
         { "userns-path", required_argument, NULL, USERNS_PATH },
         { "api-socket", required_argument, NULL, 'a' },
         { "enable-ipv6", no_argument, NULL, '6' },
-        { "enable-sandbox", no_argument, NULL, ENABLE_SANDBOX },
-        { "create-sandbox", no_argument, NULL, _DEPRECATED_CREATE_SANDBOX },
-        { "enable-seccomp", no_argument, NULL, ENABLE_SECCOMP },
         { "help", no_argument, NULL, 'h' },
         { "version", no_argument, NULL, 'v' },
         { "outbound-addr", required_argument, NULL, OUTBOUND_ADDR },
@@ -661,20 +571,6 @@ static void parse_args(int argc, char *const argv[], struct options *options)
             /* FALLTHROUGH */
         case DISABLE_HOST_LOOPBACK:
             options->disable_host_loopback = true;
-            break;
-        case _DEPRECATED_CREATE_SANDBOX:
-            // There was no tagged release with support for --create-sandbox.
-            // So no one will be affected by removal of --create-sandbox.
-            printf("WARNING: --create-sandbox is deprecated and will be "
-                   "removed in future releases, please use "
-                   "--enable-sandbox instead.\n");
-            /* FALLTHROUGH */
-        case ENABLE_SANDBOX:
-            options->enable_sandbox = true;
-            break;
-        case ENABLE_SECCOMP:
-            printf("WARNING: Support for seccomp is experimental\n");
-            options->enable_seccomp = true;
             break;
         case NETNS_TYPE:
             optarg_netns_type = optarg;
@@ -767,33 +663,6 @@ static void parse_args(int argc, char *const argv[], struct options *options)
 #undef MACADDRESS
 #undef TARGET_TYPE
 
-    /* BESS mode */
-    if (options->target_type != NULL &&
-        strcmp(options->target_type, "bess") == 0) {
-        if (argc - optind < 1) {
-            goto error;
-        }
-        if (argc - optind > 1) {
-            fprintf(stderr, "too many arguments\n");
-            goto error;
-        }
-        options->bess_socket = strdup(argv[optind]);
-        if (options->do_config_network) {
-            fprintf(stderr, "--configure conflicts with --target-type=bess\n");
-            goto error;
-        }
-        if (options->netns_type != NULL) {
-            fprintf(stderr, "--netns-type conflicts with --target-type=bess\n");
-            goto error;
-        }
-        if (options->userns_path != NULL) {
-            fprintf(stderr,
-                    "--userns-path conflicts with --target-type=bess\n");
-            goto error;
-        }
-        printf("WARNING: BESS mode is experimental\n");
-        return;
-    }
 
     /* NetNS mode*/
     if (options->target_type != NULL &&
@@ -991,23 +860,17 @@ static int slirp4netns_config_from_options(struct slirp4netns_config *cfg,
 {
     int rc = 0;
     cfg->mtu = opt->mtu;
-    rc = slirp4netns_config_from_cidr(cfg, opt->cidr == NULL ? DEFAULT_CIDR :
-                                                               opt->cidr);
+    rc = slirp4netns_config_from_cidr(cfg, opt->cidr == nullptr ? DEFAULT_CIDR :
+                                                                  opt->cidr);
     if (rc < 0) {
-        goto finish;
+        return rc;
     }
     cfg->enable_ipv6 = opt->enable_ipv6;
     cfg->disable_host_loopback = opt->disable_host_loopback;
-    cfg->enable_sandbox = opt->enable_sandbox;
-    cfg->enable_seccomp = opt->enable_seccomp;
-
-#if SLIRP_CONFIG_VERSION_MAX >= 2
     cfg->enable_outbound_addr = false;
     cfg->enable_outbound_addr6 = false;
-#endif
 
-    if (opt->outbound_addr != NULL) {
-#if SLIRP_CONFIG_VERSION_MAX >= 2
+    if (opt->outbound_addr) {
         cfg->outbound_addr.sin_family = AF_INET;
         cfg->outbound_addr.sin_port = 0; // Any local port will do
         if (inet_pton(AF_INET, opt->outbound_addr,
@@ -1018,17 +881,13 @@ static int slirp4netns_config_from_options(struct slirp4netns_config *cfg,
                                    &cfg->outbound_addr.sin_addr) != 0) {
                 fprintf(stderr, "outbound-addr has to be valid ipv4 address or "
                                 "interface name.");
-                rc = -1;
-                goto finish;
+                return -1;
             }
             cfg->enable_outbound_addr = true;
         }
-#else
         fprintf(stderr, "slirp4netns has to be compiled against libslrip 4.2.0 "
                         "or newer for --outbound-addr support.");
-        rc = -1;
-        goto finish;
-#endif
+        return -1;
     }
     if (opt->outbound_addr6 != NULL) {
 #if SLIRP_CONFIG_VERSION_MAX >= 2
@@ -1086,72 +945,58 @@ finish:
 
 int main(int argc, char *const argv[])
 {
-    int sv[2];
-    pid_t child_pid;
-    struct options options;
-    struct slirp4netns_config slirp4netns_config;
-    int exit_status = 0;
+    options options [[gnu::cleanup(options_destroy)]];
+    slirp4netns_config slirp4netns_config;
 
     parse_args(argc, argv, &options);
     if (slirp4netns_config_from_options(&slirp4netns_config, &options) < 0) {
-        exit_status = EXIT_FAILURE;
-        goto finish;
+        return EXIT_FAILURE;
     }
-    if (socketpair(AF_LOCAL, SOCK_STREAM, 0, sv) < 0) {
+
+    int sv[2];
+    if (socketpair(AF_LOCAL, SOCK_STREAM, 0, sv) < 0) [[unlikely]] {
         perror("socketpair");
-        exit_status = EXIT_FAILURE;
-        goto finish;
+        return EXIT_FAILURE;
     }
-    if ((child_pid = fork()) < 0) {
+
+    pid_t child_pid;
+    if (child_pid = fork(); child_pid < 0) {
         perror("fork");
-        exit_status = EXIT_FAILURE;
-        goto finish;
+        return EXIT_FAILURE;
     }
+
     if (child_pid == 0) {
-        int ret;
-        if (options.target_type != NULL &&
-            strcmp(options.target_type, "bess") == 0) {
-            ret = child_bess(sv[1], options.bess_socket);
-        } else {
-            ret = child(sv[1], options.target_pid, options.do_config_network,
+        int ret = child(sv[1], options.target_pid, options.do_config_network,
                         options.tapname, options.netns_path,
                         options.userns_path, &slirp4netns_config);
-        }
-        if (ret < 0) {
-            exit_status = EXIT_FAILURE;
-            goto finish;
-        }
+        if (ret < 0)
+            return EXIT_FAILURE;
     } else {
-        int ret, child_wstatus, child_status;
+        int ret;
+        int child_wstatus;
+        int child_status;
         do
             ret = waitpid(child_pid, &child_wstatus, 0);
         while (ret < 0 && errno == EINTR);
-        if (ret < 0) {
+        if (ret < 0) [[unlikely]] {
             perror("waitpid");
-            exit_status = EXIT_FAILURE;
-            goto finish;
+            return EXIT_FAILURE;
         }
-        if (!WIFEXITED(child_wstatus)) {
+        if (!WIFEXITED(child_wstatus)) [[unlikely]] {
             fprintf(stderr, "child failed(wstatus=%d, !WIFEXITED)\n",
                     child_wstatus);
-            exit_status = EXIT_FAILURE;
-            goto finish;
+            return EXIT_FAILURE;
         }
         child_status = WEXITSTATUS(child_wstatus);
-        if (child_status != 0) {
+        if (child_status != 0) [[unlikely]] {
             fprintf(stderr, "child failed(%d)\n", child_status);
-            exit_status = child_status;
-            goto finish;
+            return child_status;
         }
         if (parent(sv[0], options.ready_fd, options.exit_fd, options.api_socket,
                    &slirp4netns_config, options.target_pid) < 0) {
             fprintf(stderr, "parent failed\n");
-            exit_status = EXIT_FAILURE;
-            goto finish;
+            return EXIT_FAILURE;
         }
     }
-finish:
-    options_destroy(&options);
-    exit(exit_status);
     return 0;
 }

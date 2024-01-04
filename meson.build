@@ -1,21 +1,18 @@
 project(
      'slirp4netns' ,
-     [ 'c', 'cpp' ]
+     [ 'c', 'cpp' ],
+     default_options : [
+        'warning_level=3',
+        'cpp_std=gnu++23',
+        'cpp_eh=none'
+     ]
 )
 
 glib = dependency('glib-2.0')
 libcap = dependency('libcap')
-libseccomp = dependency('libseccomp')
 libslirp = dependency('slirp', version: '>= 4.1.0')
 
 cpp = meson.get_compiler('cpp')
-
-parson = library(
-    'parson',
-    'vendor/parson/parson.c',
-    include_directories: [ 'vendor/parson' ]
-)
-
 
 version = meson.project_version()
 
@@ -29,11 +26,17 @@ configure_file(
     configuration : conf
 )
 
+add_project_arguments([
+  cpp.get_supported_arguments(
+     '-Werror=unused-parameter',
+     '-Werror=macro-redefined',
+  ),
+], language: 'cpp')
+
+
 executable(
     'slirp4netns',
-    'api.c',
-    'slirp4netns.c',
-    'main.c',
-    dependencies: [ glib, libcap, libseccomp, libslirp ],
-    link_with: [ parson ]
+    'slirp4netns.cpp',
+    'main.cpp',
+    dependencies: [ glib, libcap, libslirp ],
 )
