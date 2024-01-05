@@ -43,4 +43,5 @@ executable(
     'sockfd.cpp',
     'syscall.cpp',
     dependencies: [ glib, libcap, libslirp ],
+    install: true,
 )
