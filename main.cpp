@@ -90,7 +90,7 @@ static int open_tap(const char *tapname)
 {
     int fd;
     struct ifreq ifr;
-    if (tapname == NULL) {
+    if (!tapname) {
         fprintf(stderr, "tapname is NULL\n");
         return -1;
     }
@@ -141,7 +141,7 @@ static int configure_network(const char *tapname,
 {
     struct rtentry route;
     struct ifreq ifr;
-    struct sockaddr_in *sai = (struct sockaddr_in *)&ifr.ifr_addr;
+    auto *sai = (struct sockaddr_in *)&ifr.ifr_addr;
     int sockfd;
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -222,7 +222,8 @@ static int child(int sock, pid_t target_pid, bool do_config_network,
                  const char *tapname, char *netns_path, char *userns_path,
                  struct slirp4netns_config *cfg)
 {
-    int rc, tapfd;
+    int rc;
+    int tapfd;
     if ((rc = nsenter(target_pid, netns_path, userns_path, false)) < 0) {
         return rc;
     }
@@ -268,7 +269,7 @@ static int recvfd(int sock)
         return -1;
     }
     cmsg = CMSG_FIRSTHDR(&msg);
-    if (cmsg == NULL || cmsg->cmsg_type != SCM_RIGHTS) {
+    if (!cmsg || cmsg->cmsg_type != SCM_RIGHTS) {
         fprintf(stderr, "the message does not contain fd\n");
         return -1;
     }
@@ -281,7 +282,8 @@ static int parent(int sock, int ready_fd, int exit_fd, const char *api_socket,
                   pid_t target_pid [[gnu::unused]])
 {
     char str[INET6_ADDRSTRLEN];
-    int rc, tapfd;
+    int rc;
+    int tapfd;
     struct in_addr vdhcp_end = {
 #define NB_BOOTP_CLIENTS 16
         /* NB_BOOTP_CLIENTS is hard-coded to 16 in libslirp:
@@ -310,7 +312,7 @@ static int parent(int sock, int ready_fd, int exit_fd, const char *api_socket,
            inet_ntop(AF_INET, &vdhcp_end, str, sizeof(str)));
     printf("* Recommended IP:  %s\n",
            inet_ntop(AF_INET, &cfg->recommended_vguest, str, sizeof(str)));
-    if (api_socket != NULL) {
+    if (api_socket) {
         printf("* API Socket:      %s\n", api_socket);
     }
 #if SLIRP_CONFIG_VERSION_MAX >= 2
@@ -321,13 +323,13 @@ static int parent(int sock, int ready_fd, int exit_fd, const char *api_socket,
     }
     if (cfg->enable_outbound_addr6) {
         if (inet_ntop(AF_INET6, &cfg->outbound_addr6.sin6_addr, str,
-                      sizeof(str)) != NULL) {
+                      sizeof(str))) {
             printf("* Outbound IPv6:    %s\n", str);
         }
     }
 #endif
     if (cfg->vmacaddress_len > 0) {
-        unsigned char *mac = (unsigned char *)cfg->vmacaddress.sa_data;
+        auto *mac = (unsigned char *)cfg->vmacaddress.sa_data;
         printf("* MAC address:     %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0],
                mac[1], mac[2], mac[3], mac[4], mac[5]);
     }
@@ -435,45 +437,45 @@ static void options_init(struct options *options)
 
 static void options_destroy(struct options *options)
 {
-    if (options->tapname != NULL) {
+    if (options->tapname) {
         free(options->tapname);
-        options->tapname = NULL;
+        options->tapname = nullptr;
     }
-    if (options->cidr != NULL) {
+    if (options->cidr) {
         free(options->cidr);
-        options->cidr = NULL;
+        options->cidr = nullptr;
     }
-    if (options->api_socket != NULL) {
+    if (options->api_socket) {
         free(options->api_socket);
-        options->api_socket = NULL;
+        options->api_socket = nullptr;
     }
-    if (options->netns_type != NULL) {
+    if (options->netns_type) {
         free(options->netns_type);
-        options->netns_type = NULL;
+        options->netns_type = nullptr;
     }
-    if (options->netns_path != NULL) {
+    if (options->netns_path) {
         free(options->netns_path);
-        options->netns_path = NULL;
+        options->netns_path = nullptr;
     }
-    if (options->userns_path != NULL) {
+    if (options->userns_path) {
         free(options->userns_path);
-        options->userns_path = NULL;
+        options->userns_path = nullptr;
     }
-    if (options->outbound_addr != NULL) {
+    if (options->outbound_addr) {
         free(options->outbound_addr);
-        options->outbound_addr = NULL;
+        options->outbound_addr = nullptr;
     }
-    if (options->outbound_addr6 != NULL) {
+    if (options->outbound_addr6) {
         free(options->outbound_addr6);
-        options->outbound_addr6 = NULL;
+        options->outbound_addr6 = nullptr;
     }
-    if (options->macaddress != NULL) {
+    if (options->macaddress) {
         free(options->macaddress);
-        options->macaddress = NULL;
+        options->macaddress = nullptr;
     }
-    if (options->target_type != NULL) {
+    if (options->target_type) {
         free(options->target_type);
-        options->target_type = NULL;
+        options->target_type = nullptr;
     }
 }
 
@@ -483,52 +485,54 @@ static void options_destroy(struct options *options)
 static void parse_args(int argc, char *const argv[], struct options *options)
 {
     int opt;
-    char *strtol_e = NULL;
-    char *optarg_cidr = NULL;
-    char *optarg_netns_type = NULL;
-    char *optarg_userns_path = NULL;
-    char *optarg_api_socket = NULL;
-    char *optarg_outbound_addr = NULL;
-    char *optarg_outbound_addr6 = NULL;
-    char *optarg_macaddress = NULL;
-    char *optarg_target_type = NULL;
-#define CIDR -42
-#define DISABLE_HOST_LOOPBACK -43
-#define NETNS_TYPE -44
-#define USERNS_PATH -45
-#define OUTBOUND_ADDR -48
-#define OUTBOUND_ADDR6 -49
-#define DISABLE_DNS -50
-#define MACADDRESS -51
-#define TARGET_TYPE -52
-#define _DEPRECATED_NO_HOST_LOOPBACK \
-    -10043 // deprecated in favor of disable-host-loopback
-#define _DEPRECATED_CREATE_SANDBOX \
-    -10044 // deprecated in favor of enable-sandbox
+    char *strtol_e = nullptr;
+    char *optarg_cidr = nullptr;
+    char *optarg_netns_type = nullptr;
+    char *optarg_userns_path = nullptr;
+    char *optarg_api_socket = nullptr;
+    char *optarg_outbound_addr = nullptr;
+    char *optarg_outbound_addr6 = nullptr;
+    char *optarg_macaddress = nullptr;
+    char *optarg_target_type = nullptr;
+#define CIDR (-42)
+#define DISABLE_HOST_LOOPBACK (-43)
+#define NETNS_TYPE (-44)
+#define USERNS_PATH (-45)
+#define OUTBOUND_ADDR (-48)
+#define OUTBOUND_ADDR6 (-49)
+#define DISABLE_DNS (-50)
+#define MACADDRESS (-51)
+#define TARGET_TYPE (-52)
+#define DEPRECATED_NO_HOST_LOOPBACK \
+    (-10043) // deprecated in favor of disable-host-loopback
+#define DEPRECATED_CREATE_SANDBOX \
+    (-10044) // deprecated in favor of enable-sandbox
     const struct option longopts[] = {
-        { "configure", no_argument, NULL, 'c' },
-        { "exit-fd", required_argument, NULL, 'e' },
-        { "ready-fd", required_argument, NULL, 'r' },
-        { "mtu", required_argument, NULL, 'm' },
-        { "cidr", required_argument, NULL, CIDR },
-        { "disable-host-loopback", no_argument, NULL, DISABLE_HOST_LOOPBACK },
-        { "no-host-loopback", no_argument, NULL, _DEPRECATED_NO_HOST_LOOPBACK },
-        { "netns-type", required_argument, NULL, NETNS_TYPE },
-        { "userns-path", required_argument, NULL, USERNS_PATH },
-        { "api-socket", required_argument, NULL, 'a' },
-        { "enable-ipv6", no_argument, NULL, '6' },
-        { "help", no_argument, NULL, 'h' },
-        { "version", no_argument, NULL, 'v' },
-        { "outbound-addr", required_argument, NULL, OUTBOUND_ADDR },
-        { "outbound-addr6", required_argument, NULL, OUTBOUND_ADDR6 },
-        { "disable-dns", no_argument, NULL, DISABLE_DNS },
-        { "macaddress", required_argument, NULL, MACADDRESS },
-        { "target-type", required_argument, NULL, TARGET_TYPE },
-        { 0, 0, 0, 0 },
+        { "configure", no_argument, nullptr, 'c' },
+        { "exit-fd", required_argument, nullptr, 'e' },
+        { "ready-fd", required_argument, nullptr, 'r' },
+        { "mtu", required_argument, nullptr, 'm' },
+        { "cidr", required_argument, nullptr, CIDR },
+        { "disable-host-loopback", no_argument, nullptr,
+          DISABLE_HOST_LOOPBACK },
+        { "no-host-loopback", no_argument, nullptr,
+          DEPRECATED_NO_HOST_LOOPBACK },
+        { "netns-type", required_argument, nullptr, NETNS_TYPE },
+        { "userns-path", required_argument, nullptr, USERNS_PATH },
+        { "api-socket", required_argument, nullptr, 'a' },
+        { "enable-ipv6", no_argument, nullptr, '6' },
+        { "help", no_argument, nullptr, 'h' },
+        { "version", no_argument, nullptr, 'v' },
+        { "outbound-addr", required_argument, nullptr, OUTBOUND_ADDR },
+        { "outbound-addr6", required_argument, nullptr, OUTBOUND_ADDR6 },
+        { "disable-dns", no_argument, nullptr, DISABLE_DNS },
+        { "macaddress", required_argument, nullptr, MACADDRESS },
+        { "target-type", required_argument, nullptr, TARGET_TYPE },
+        { nullptr, 0, nullptr, 0 },
     };
     options_init(options);
     /* NOTE: clang-tidy hates strdup(optarg) in the while loop (#112) */
-    while ((opt = getopt_long(argc, argv, "ce:r:m:a:6hv", longopts, NULL)) !=
+    while ((opt = getopt_long(argc, argv, "ce:r:m:a:6hv", longopts, nullptr)) !=
            -1) {
         switch (opt) {
         case 'c':
@@ -562,7 +566,7 @@ static void parse_args(int argc, char *const argv[], struct options *options)
         case CIDR:
             optarg_cidr = optarg;
             break;
-        case _DEPRECATED_NO_HOST_LOOPBACK:
+        case DEPRECATED_NO_HOST_LOOPBACK:
             // There was no tagged release with support for --no-host-loopback.
             // So no one will be affected by removal of --no-host-loopback.
             printf("WARNING: --no-host-loopback is deprecated and will be "
@@ -620,25 +624,25 @@ static void parse_args(int argc, char *const argv[], struct options *options)
             break;
         }
     }
-    if (optarg_cidr != NULL) {
+    if (optarg_cidr) {
         options->cidr = strdup(optarg_cidr);
     }
-    if (optarg_netns_type != NULL) {
+    if (optarg_netns_type) {
         options->netns_type = strdup(optarg_netns_type);
     }
-    if (optarg_userns_path != NULL) {
+    if (optarg_userns_path) {
         options->userns_path = strdup(optarg_userns_path);
     }
-    if (optarg_api_socket != NULL) {
+    if (optarg_api_socket) {
         options->api_socket = strdup(optarg_api_socket);
     }
-    if (optarg_outbound_addr != NULL) {
+    if (optarg_outbound_addr) {
         options->outbound_addr = strdup(optarg_outbound_addr);
     }
-    if (optarg_outbound_addr6 != NULL) {
+    if (optarg_outbound_addr6) {
         options->outbound_addr6 = strdup(optarg_outbound_addr6);
     }
-    if (optarg_macaddress != NULL) {
+    if (optarg_macaddress) {
         if (!options->do_config_network) {
             fprintf(stderr, "--macaddr cannot be specified when --configure or "
                             "-c is not specified\n");
@@ -647,7 +651,7 @@ static void parse_args(int argc, char *const argv[], struct options *options)
             options->macaddress = strdup(optarg_macaddress);
         }
     }
-    if (optarg_target_type != NULL) {
+    if (optarg_target_type) {
         options->target_type = strdup(optarg_target_type);
     }
 #undef CIDR
@@ -665,8 +669,7 @@ static void parse_args(int argc, char *const argv[], struct options *options)
 
 
     /* NetNS mode*/
-    if (options->target_type != NULL &&
-        strcmp(options->target_type, "netns") != 0) {
+    if (options->target_type && strcmp(options->target_type, "netns") != 0) {
         fprintf(stderr, "--target-type must be either \"netns\" or \"bess\"\n");
         goto error;
     }
@@ -720,7 +723,8 @@ static int parse_cidr(struct in_addr *network, struct in_addr *netmask,
     regmatch_t matches[4];
     size_t nmatch = sizeof(matches) / sizeof(matches[0]);
     const char *cidr_regex = "^(([0-9]{1,3}\\.){3}[0-9]{1,3})/([0-9]{1,2})$";
-    char snetwork[16], sprefix[16];
+    char snetwork[16];
+    char sprefix[16];
     int prefix;
     rc = regcomp(&r, cidr_regex, REG_EXTENDED);
     if (rc != 0) {
@@ -750,7 +754,7 @@ static int parse_cidr(struct in_addr *network, struct in_addr *netmask,
         goto finish;
     }
     errno = 0;
-    prefix = strtoul(sprefix, NULL, 10);
+    prefix = strtoul(sprefix, nullptr, 10);
     if (errno) {
         fprintf(stderr, "invalid prefix length: %s\n", sprefix);
         rc = -1;
@@ -796,8 +800,9 @@ finish:
 
 static int get_interface_addr(const char *interface, int af, void *addr)
 {
-    struct ifaddrs *ifaddr, *ifa;
-    if (interface == NULL)
+    struct ifaddrs *ifaddr;
+    struct ifaddrs *ifa;
+    if (!interface)
         return -1;
 
     if (getifaddrs(&ifaddr) == -1) {
@@ -805,8 +810,8 @@ static int get_interface_addr(const char *interface, int af, void *addr)
         return -1;
     }
 
-    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (ifa->ifa_addr == NULL || ifa->ifa_name == NULL)
+    for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr || !ifa->ifa_name)
             continue;
         if (ifa->ifa_addr->sa_family == af) {
             if (strcmp(ifa->ifa_name, interface) == 0) {
@@ -836,7 +841,7 @@ static int slirp4netns_macaddr_hexstring_to_data(char *macaddr, char *data)
     char *macaddr_ptr;
     char *data_ptr;
     for (macaddr_ptr = macaddr, data_ptr = data;
-         macaddr_ptr != NULL && data_ptr < data + 6;
+         macaddr_ptr && data_ptr < data + 6;
          macaddr_ptr = strchr(macaddr_ptr, ':'), data_ptr++) {
         if (macaddr_ptr != macaddr) {
             macaddr_ptr++; // advance over the :
@@ -847,7 +852,7 @@ static int slirp4netns_macaddr_hexstring_to_data(char *macaddr, char *data)
         }
         *data_ptr = temp;
     }
-    if (macaddr_ptr != NULL) {
+    if (macaddr_ptr) {
         fprintf(stderr, "\"%s\" is an invalid MAC address.  Is it too long?\n",
                 macaddr);
         return -1;
@@ -860,8 +865,8 @@ static int slirp4netns_config_from_options(struct slirp4netns_config *cfg,
 {
     int rc = 0;
     cfg->mtu = opt->mtu;
-    rc = slirp4netns_config_from_cidr(cfg, opt->cidr == nullptr ? DEFAULT_CIDR :
-                                                                  opt->cidr);
+    rc = slirp4netns_config_from_cidr(cfg,
+                                      !opt->cidr ? DEFAULT_CIDR : opt->cidr);
     if (rc < 0) {
         return rc;
     }
@@ -889,7 +894,7 @@ static int slirp4netns_config_from_options(struct slirp4netns_config *cfg,
                         "or newer for --outbound-addr support.");
         return -1;
     }
-    if (opt->outbound_addr6 != NULL) {
+    if (opt->outbound_addr6) {
 #if SLIRP_CONFIG_VERSION_MAX >= 2
         cfg->outbound_addr6.sin6_family = AF_INET6;
         cfg->outbound_addr6.sin6_port = 0; // Any local port will do
@@ -927,7 +932,7 @@ static int slirp4netns_config_from_options(struct slirp4netns_config *cfg,
 
     cfg->vmacaddress_len = 0;
     memset(&cfg->vmacaddress, 0, sizeof(cfg->vmacaddress));
-    if (opt->macaddress != NULL) {
+    if (opt->macaddress) {
         cfg->vmacaddress.sa_family = AF_LOCAL;
         int macaddr_len;
         if ((macaddr_len = slirp4netns_macaddr_hexstring_to_data(

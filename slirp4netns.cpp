@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-#include <errno.h>
-#include <signal.h>
-#include <stdio.h>
-#include <string.h>
+#include <cerrno>
+#include <csignal>
+#include <cstdio>
+#include <cstring>
 #include <unistd.h>
 
 #include <glib.h>
@@ -20,7 +20,7 @@ struct libslirp_data {
 static ssize_t libslirp_send_packet(const void *pkt, size_t pkt_len,
                                     void *opaque)
 {
-    struct libslirp_data *data = (struct libslirp_data *)opaque;
+    auto *data = (struct libslirp_data *)opaque;
     return write(data->tapfd, pkt, pkt_len);
 }
 
@@ -48,8 +48,8 @@ struct timer {
 /* implements SlirpCb.timer_new */
 static void *libslirp_timer_new(SlirpTimerCb cb, void *cb_opaque, void *opaque)
 {
-    struct libslirp_data *data = (struct libslirp_data *)opaque;
-    struct timer *t = static_cast<struct timer *>(g_malloc0(sizeof(*t)));
+    auto *data = (libslirp_data *)opaque;
+    auto *t = static_cast<timer *>(g_malloc0(sizeof(timer)));
     t->cb = cb;
     t->cb_opaque = cb_opaque;
     t->expire_timer_msec = -1;
@@ -60,7 +60,7 @@ static void *libslirp_timer_new(SlirpTimerCb cb, void *cb_opaque, void *opaque)
 /* implements SlirpCb.timer_free */
 static void libslirp_timer_free(void *timer, void *opaque)
 {
-    struct libslirp_data *data = (struct libslirp_data *)opaque;
+    auto *data = (libslirp_data *)opaque;
     data->timers = g_slist_remove(data->timers, timer);
     g_free(timer);
 }
@@ -69,7 +69,7 @@ static void libslirp_timer_free(void *timer, void *opaque)
 static void libslirp_timer_mod(void *timer, int64_t expire_timer_msec,
                                void *opaque [[gnu::unused]])
 {
-    struct timer *t = (struct timer *)timer;
+    auto *t = (struct timer *)timer;
     t->expire_timer_msec = expire_timer_msec;
 }
 
@@ -149,7 +149,7 @@ static int libslirp_poll_to_gio(int events)
  */
 static int libslirp_add_poll(int fd, int events, void *opaque)
 {
-    GArray *pollfds = (GArray *)(opaque);
+    auto *pollfds = (GArray *)(opaque);
     GPollFD pfd = {
         .fd = fd,
         .events = (ushort)libslirp_poll_to_gio(events),
@@ -187,7 +187,7 @@ static int libslirp_gio_to_poll(int events)
  */
 static int libslirp_get_revents(int idx, void *opaque)
 {
-    GArray *pollfds = (GArray *)(opaque);
+    auto *pollfds = (GArray *)(opaque);
     return libslirp_gio_to_poll(g_array_index(pollfds, GPollFD, idx).revents);
 }
 
@@ -201,8 +201,8 @@ static void update_ra_timeout(uint32_t *timeout_msec,
 {
     int64_t now_msec = libslirp_clock_get_ns(data) / 1000000;
     GSList *f;
-    for (f = data->timers; f != NULL; f = f->next) {
-        struct timer *t = (timer *)f->data;
+    for (f = data->timers; f != nullptr; f = f->next) {
+        auto *t = (timer *)f->data;
         if (t->expire_timer_msec != -1) {
             int64_t diff = t->expire_timer_msec - now_msec;
             if (diff < 0)
@@ -222,8 +222,8 @@ static void check_ra_timeout(struct libslirp_data *data)
 {
     int64_t now_msec = libslirp_clock_get_ns(data) / 1000000;
     GSList *f;
-    for (f = data->timers; f != NULL; f = f->next) {
-        struct timer *t = static_cast<struct timer *>(f->data);
+    for (f = data->timers; f; f = f->next) {
+        auto *t = static_cast<struct timer *>(f->data);
         if (t->expire_timer_msec != -1) {
             int64_t diff = t->expire_timer_msec - now_msec;
             if (diff <= 0) {
@@ -248,12 +248,12 @@ static const SlirpCb libslirp_cb = {
 
 Slirp *create_slirp(void *opaque, struct slirp4netns_config *s4nn)
 {
-    Slirp *slirp = NULL;
+    Slirp *slirp = nullptr;
     SlirpConfig cfg;
     memset(&cfg, 0, sizeof(cfg));
     cfg.version = 1;
     cfg.restricted = 0;
-    cfg.in_enabled = 1;
+    cfg.in_enabled = true;
     cfg.vnetwork = s4nn->vnetwork;
     cfg.vnetmask = s4nn->vnetmask;
     cfg.vhost = s4nn->vhost;
@@ -261,21 +261,21 @@ Slirp *create_slirp(void *opaque, struct slirp4netns_config *s4nn)
     inet_pton(AF_INET6, "fd00::", &cfg.vprefix_addr6);
     cfg.vprefix_len = 64;
     inet_pton(AF_INET6, "fd00::2", &cfg.vhost6);
-    cfg.vhostname = NULL;
-    cfg.tftp_server_name = NULL;
-    cfg.tftp_path = NULL;
-    cfg.bootfile = NULL;
+    cfg.vhostname = nullptr;
+    cfg.tftp_server_name = nullptr;
+    cfg.tftp_path = nullptr;
+    cfg.bootfile = nullptr;
     cfg.vdhcp_start = s4nn->vdhcp_start;
     cfg.vnameserver = s4nn->vnameserver;
     inet_pton(AF_INET6, "fd00::3", &cfg.vnameserver6);
-    cfg.vdnssearch = NULL;
-    cfg.vdomainname = NULL;
+    cfg.vdnssearch = nullptr;
+    cfg.vdomainname = nullptr;
     cfg.if_mtu = s4nn->mtu;
     cfg.if_mru = s4nn->mtu;
     cfg.disable_host_loopback = s4nn->disable_host_loopback;
 #if SLIRP_CONFIG_VERSION_MAX >= 2
-    cfg.outbound_addr = NULL;
-    cfg.outbound_addr6 = NULL;
+    cfg.outbound_addr = nullptr;
+    cfg.outbound_addr6 = nullptr;
     if (s4nn->enable_outbound_addr) {
         cfg.version = 2;
         cfg.outbound_addr = &s4nn->outbound_addr;
@@ -292,7 +292,7 @@ Slirp *create_slirp(void *opaque, struct slirp4netns_config *s4nn)
     }
 #endif
     slirp = slirp_new(&cfg, &libslirp_cb, opaque);
-    if (slirp == NULL) {
+    if (!slirp) {
         fprintf(stderr, "slirp_new failed\n");
     }
     return slirp;
@@ -305,9 +305,9 @@ int do_slirp(int tapfd, int readyfd, int exitfd,
              struct slirp4netns_config *cfg)
 {
     int ret = -1;
-    Slirp *slirp = NULL;
-    uint8_t *buf = NULL;
-    struct libslirp_data opaque = { .tapfd = tapfd, .timers = NULL };
+    Slirp *slirp = nullptr;
+    uint8_t *buf = nullptr;
+    struct libslirp_data opaque = { .tapfd = tapfd, .timers = nullptr };
     GArray *pollfds = g_array_new(FALSE, FALSE, sizeof(GPollFD));
     int pollfds_exitfd_idx = -1;
     size_t n_fds = 1;
@@ -315,17 +315,14 @@ int do_slirp(int tapfd, int readyfd, int exitfd,
                            .events = G_IO_IN | G_IO_HUP,
                            .revents = 0 };
     GPollFD exit_pollfd = { .fd = exitfd, .events = G_IO_HUP, .revents = 0 };
-    GPollFD api_pollfd = { .fd = -1,
-                           .events = G_IO_IN | G_IO_HUP,
-                           .revents = 0 };
 
     slirp = create_slirp((void *)&opaque, cfg);
-    if (slirp == NULL) {
+    if (!slirp) {
         fprintf(stderr, "create_slirp failed\n");
         goto err;
     }
     buf = (unsigned char *)malloc(ETH_BUF_SIZE);
-    if (buf == NULL) {
+    if (!buf) {
         goto err;
     }
     g_array_append_val(pollfds, tap_pollfd);
@@ -342,7 +339,7 @@ int do_slirp(int tapfd, int readyfd, int exitfd,
         while (rc < 0 && errno == EINTR);
         close(readyfd);
     }
-    while (1) {
+    for (;;) {
         int pollout;
         GPollFD *pollfds_data;
         uint32_t timeout = -1; /* msec */
@@ -383,7 +380,7 @@ success:
     ret = 0;
 err:
     fprintf(stderr, "do_slirp is exiting\n");
-    if (buf != NULL) {
+    if (!buf) {
         free(buf);
     }
     g_array_free(pollfds, TRUE);
