@@ -319,6 +319,12 @@ int do_slirp(int tapfd, struct slirp4netns_config *cfg) {
     if (!buf) {
         goto err;
     }
+    for (auto &[from, to] : cfg->port_forwards) {
+        // slirp_add_hostfwd(slirp, /*is_udp=*/true, {0}, from,
+        //                   {cfg->recommended_vguest}, to);
+        slirp_add_hostfwd(slirp, /*is_udp=*/false, {0}, from,
+                          {cfg->recommended_vguest}, to);
+    }
     g_array_append_val(pollfds, tap_pollfd);
     signal(SIGPIPE, SIG_IGN);
     for (;;) {

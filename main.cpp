@@ -86,6 +86,9 @@ static int parent(int sock, struct slirp4netns_config *cfg) {
            "--disable-host-loopback to prohibit connecting to 127.0.0.1:*)\n",
            inet_ntop(AF_INET, &cfg->vhost, str, sizeof(str)));
   }
+  for (auto &[from, to] : cfg->port_forwards) {
+    printf("* Port forward:    %d -> %d\n", from, to);
+  }
   if ((rc = do_slirp(tapfd, cfg)) < 0) {
     fprintf(stderr, "do_slirp failed\n");
     close(tapfd);
@@ -136,7 +139,8 @@ int do_clone(int target_pid, int &pidfd, pid_t &child_pid) {
   return 0;
 }
 
-int parse_args(int argc, char *argv[], int &target_pid, int &index) {
+int parse_args(int argc, char *argv[], int &target_pid, int &index,
+               slirp4netns_config &config) {
   target_pid = -1;
   index = -1;
   for (int i = 0; i < argc; i++) {
@@ -150,6 +154,16 @@ int parse_args(int argc, char *argv[], int &target_pid, int &index) {
         error_return("missing argument\n");
       index = i;
       break;
+    } else if (arg == "-p") {
+      int from;
+      int to;
+      if (++i == argc)
+        error_return("missing argument\n");
+      from = std::stoi(argv[i]);
+      if (++i == argc)
+        error_return("missing argument\n");
+      to = std::stoi(argv[i]);
+      config.port_forwards.emplace_back(from, to);
     }
   }
   return 0;
@@ -158,8 +172,6 @@ int parse_args(int argc, char *argv[], int &target_pid, int &index) {
 int main(int argc, char *argv[]) {
   int target_pid;
   int index;
-  if (parse_args(argc, argv, target_pid, index) < 0)
-    return EXIT_FAILURE;
   slirp4netns_config slirp4netns_config{
       .mtu = 1500,
       .vnetwork = {htonl(0x0A000200)},
@@ -170,6 +182,8 @@ int main(int argc, char *argv[]) {
       .recommended_vguest = {htonl(0x0A000264)},
       .disable_host_loopback = true,
   };
+  if (parse_args(argc, argv, target_pid, index, slirp4netns_config) < 0)
+    return EXIT_FAILURE;
 
   int sv[2];
   if (socketpair(AF_LOCAL, SOCK_STREAM, 0, sv) < 0) [[unlikely]] {

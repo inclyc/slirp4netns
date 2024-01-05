@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #ifndef SLIRP4NETNS_H
 #define SLIRP4NETNS_H
+
+#include <vector>
+
 #include <arpa/inet.h>
 
 // libslirp
@@ -24,6 +27,7 @@ struct slirp4netns_config {
   bool disable_dns;
   struct sockaddr vmacaddress; // MAC address of interface
   int vmacaddress_len;         // MAC address byte length
+  std::vector<std::pair<int, int>> port_forwards;
 };
 int do_slirp(int tapfd, struct slirp4netns_config *cfg);
 
