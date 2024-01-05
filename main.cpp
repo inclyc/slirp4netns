@@ -692,6 +692,18 @@ finish:
   return rc;
 }
 
+static void check_child(int child_wstatus) {
+  if (!WIFEXITED(child_wstatus)) [[unlikely]] {
+    fprintf(stderr, "child failed(wstatus=%d, !WIFEXITED)\n", child_wstatus);
+    std::exit(EXIT_FAILURE);
+  }
+  int child_status = WEXITSTATUS(child_wstatus);
+  if (child_status != 0) [[unlikely]] {
+    fprintf(stderr, "child failed(%d)\n", child_status);
+    std::exit(EXIT_FAILURE);
+  }
+}
+
 int main(int argc, char *const argv[]) {
   options options [[gnu::cleanup(options_destroy)]];
   slirp4netns_config slirp4netns_config;
@@ -725,7 +737,6 @@ int main(int argc, char *const argv[]) {
   } else {
     int ret;
     int child_wstatus;
-    int child_status;
     do
       ret = waitpid(child_pid, &child_wstatus, 0);
     while (ret < 0 && errno == EINTR);
@@ -733,15 +744,7 @@ int main(int argc, char *const argv[]) {
       perror("waitpid");
       return EXIT_FAILURE;
     }
-    if (!WIFEXITED(child_wstatus)) [[unlikely]] {
-      fprintf(stderr, "child failed(wstatus=%d, !WIFEXITED)\n", child_wstatus);
-      return EXIT_FAILURE;
-    }
-    child_status = WEXITSTATUS(child_wstatus);
-    if (child_status != 0) [[unlikely]] {
-      fprintf(stderr, "child failed(%d)\n", child_status);
-      return child_status;
-    }
+    check_child(child_wstatus);
     if (parent(sv[0], options.ready_fd, options.exit_fd, options.api_socket,
                &slirp4netns_config, options.target_pid) < 0) {
       fprintf(stderr, "parent failed\n");
