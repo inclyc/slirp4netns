@@ -36,7 +36,11 @@ add_project_arguments([
 
 executable(
     'slirp4netns',
+    'cleanup.cpp',
+    'child.cpp',
     'slirp4netns.cpp',
     'main.cpp',
+    'sockfd.cpp',
+    'syscall.cpp',
     dependencies: [ glib, libcap, libslirp ],
 )
