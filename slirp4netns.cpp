@@ -300,10 +300,7 @@ Slirp *create_slirp(void *opaque, struct slirp4netns_config *s4nn)
 
 #define ETH_BUF_SIZE (65536)
 
-int do_slirp(int tapfd, int readyfd, int exitfd,
-             const char *api_socket [[gnu::unused]],
-             struct slirp4netns_config *cfg)
-{
+int do_slirp(int tapfd, struct slirp4netns_config *cfg) {
     int ret = -1;
     Slirp *slirp = nullptr;
     uint8_t *buf = nullptr;
@@ -311,11 +308,8 @@ int do_slirp(int tapfd, int readyfd, int exitfd,
     GArray *pollfds = g_array_new(FALSE, FALSE, sizeof(GPollFD));
     int pollfds_exitfd_idx = -1;
     size_t n_fds = 1;
-    GPollFD tap_pollfd = { .fd = tapfd,
-                           .events = G_IO_IN | G_IO_HUP,
-                           .revents = 0 };
-    GPollFD exit_pollfd = { .fd = exitfd, .events = G_IO_HUP, .revents = 0 };
-
+    GPollFD tap_pollfd = {
+        .fd = tapfd, .events = G_IO_IN | G_IO_HUP, .revents = 0};
     slirp = create_slirp((void *)&opaque, cfg);
     if (!slirp) {
         fprintf(stderr, "create_slirp failed\n");
@@ -326,19 +320,7 @@ int do_slirp(int tapfd, int readyfd, int exitfd,
         goto err;
     }
     g_array_append_val(pollfds, tap_pollfd);
-    if (exitfd >= 0) {
-        n_fds++;
-        g_array_append_val(pollfds, exit_pollfd);
-        pollfds_exitfd_idx = n_fds - 1;
-    }
     signal(SIGPIPE, SIG_IGN);
-    if (readyfd >= 0) {
-        int rc = -1;
-        do
-            rc = write(readyfd, "1", 1);
-        while (rc < 0 && errno == EINTR);
-        close(readyfd);
-    }
     for (;;) {
         int pollout;
         GPollFD *pollfds_data;

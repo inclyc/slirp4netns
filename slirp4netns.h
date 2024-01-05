@@ -17,19 +17,14 @@ struct slirp4netns_config {
       recommended_vguest; // 10.0.2.100 (slirp itself is unaware of vguest)
   bool enable_ipv6;
   bool disable_host_loopback;
-#if SLIRP_CONFIG_VERSION_MAX >= 2
   bool enable_outbound_addr;
   struct sockaddr_in outbound_addr;
   bool enable_outbound_addr6;
   struct sockaddr_in6 outbound_addr6;
-#endif
-#if SLIRP_CONFIG_VERSION_MAX >= 3
   bool disable_dns;
-#endif
   struct sockaddr vmacaddress; // MAC address of interface
   int vmacaddress_len;         // MAC address byte length
 };
-int do_slirp(int tapfd, int readyfd, int exitfd, const char *api_socket,
-             struct slirp4netns_config *cfg);
+int do_slirp(int tapfd, struct slirp4netns_config *cfg);
 
 #endif
