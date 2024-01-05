@@ -123,9 +123,10 @@ static int configure_network(const char *tapname,
   return 0;
 }
 
-int child(int sock, int pidfd, const char *tapname,
+int child(int _sock, int pidfd, const char *tapname,
           struct slirp4netns_config *cfg) {
-  int tapfd;
+  int tapfd [[gnu::cleanup(cleanup_fd)]] = FD_CLOSED;
+  int sock [[gnu::cleanup(cleanup_fd)]] = _sock;
   setns(pidfd, CLONE_NEWUSER | CLONE_NEWNET);
   if (tapfd = open_tap(tapname); tapfd < 0) {
     return tapfd;
@@ -134,11 +135,8 @@ int child(int sock, int pidfd, const char *tapname,
     return -1;
   }
   if (int err = sendfd(sock, tapfd); err < 0) {
-    close(tapfd);
-    close(sock);
     return -1;
   }
   fprintf(stderr, "sent tapfd=%d for %s\n", tapfd, tapname);
-  close(sock);
   return 0;
 }
